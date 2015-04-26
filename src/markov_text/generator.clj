@@ -24,9 +24,9 @@
   [words]
   (str/join " " words))
 
-(take 3 ["Jack" "and" "Jill" "went" "up" "a" "hill."])
+;(take 3 ["Jack" "and" "Jill" "went" "up" "a" "hill."])
 
-(build-phrase ["Jack" "and" "Jill" "went" "up" "a" "hill."])
+;(build-phrase ["Jack" "and" "Jill" "went" "up" "a" "hill."])
 
 (defn build-corpus
   [phrase-size tokens]
@@ -49,6 +49,7 @@
         tokens (str/split doc #"\s+")]
     (build-corpus 2 tokens)))
 
+;; todo remove duplicates from corpus
 (def corpus  (:corpus (process-text text)))
 (def freq-table (:next-words (process-text text)))
 
