@@ -30,11 +30,11 @@
 
 (defn build-corpus
   [phrase-size tokens]
-  (loop [phrases (transient [])
+  (loop [phrases (transient #{})
          freqs (transient {})
          t tokens]
     (if (empty? t)
-      {:corpus (persistent! phrases)
+      {:corpus (vec (persistent! phrases))
        :next-words (persistent! freqs)}
       (let [phrase-tokens (build-phrase (take phrase-size t))
             next-token (last (take (+ 1 phrase-size) t))
@@ -80,6 +80,6 @@
     (println text-key)
     next-phrase))
 
-(def c (rand-nth corpus))
+(def c (first corpus))
 
 (get-next-phrase c freq-table corpus)
