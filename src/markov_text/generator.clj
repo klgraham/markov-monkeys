@@ -106,7 +106,7 @@
   (let [next-text (generate-text-of-next-phrase current-phrase next-word)]
     (find-phrase-in-corpus next-text corpus)))
 
-; todo: append period to end of sentence 
+; todo: append period to end of sentence
 (defn generate-sentence
   "Given the desired sentence length, the corpus, and the frequency table, generate a sentence.
   Returns a vector"
