@@ -2,10 +2,17 @@
   (:use midje.sweet)
   (:require [markov-text.generator :as mtg]))
 
-(fact "Tokenization and de-tokenization work as expected."
-      (mtg/tokenize "Fear is the mind-killer.") => ["Fear" "is" "the" "mind-killer."]
+(facts "Can perform basic NLP tasks."
+       (fact "Can replace newlines with spaces."
+             (let [text "An apple\n\na\nday."
+                   expected "An apple a day."
+                   newline-replaced (mtg/replace-newlines text)]
+               (= expected newline-replaced)) => true)
 
-      (mtg/detokenize ["Fear" "is" "the" "mind-killer."]) => "Fear is the mind-killer.")
+       (fact "Tokenization and de-tokenization work as expected."
+             (mtg/tokenize "Fear is the mind-killer.\n") => ["Fear" "is" "the" "mind-killer."]
+
+             (mtg/detokenize ["Fear" "is" "the" "mind-killer."]) => "Fear is the mind-killer."))
 
 (fact "Can generate a unique id for a phrase."
       (let [p1 {:text "John" :pos :NP}
