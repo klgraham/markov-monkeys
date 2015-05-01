@@ -2,7 +2,7 @@
 
 (require '[clojure.string :as str])
 
-(def text "Jack and Jill went up a hill to fetch a pail of water. Jack fell down and broke his crown, and Jill came tumbling after.")
+(def text "see spot run. see spot jump. see spot swim.")
 
 ;;; Basic NLP
 ; todo: use OpenNLP to perform tokenization and to provide POS
@@ -11,10 +11,15 @@
 ; use a Record for phrase and a record for word, to distinguish between them. but perhaps not.
 ; If i do use it, then a phrase can actually just be a vector of words. no need for the phrase to have
 ; its own POS. Or, I can use chunking, but that will likely be too sophisticated.
+
+(defn replace-newlines
+  [s]
+  (str/replace s #"\n+" " "))
+
 (defn tokenize
   "Given a string, break on whitespace and return tokens."
   [s]
-  (str/split s #"\s+"))
+  (-> s replace-newlines str/trim (str/split #"\s+")))
 
 (defn detokenize
   "Given a sequential collection of tokens, join by adding whitespace between then tokens."
@@ -53,24 +58,20 @@
       {:corpus (vec (persistent! phrases))
        :next-words (persistent! freqs)}
       (let [phrase-tokens (vec (take phrase-size t))
-            next-token (last (take (+ 1 phrase-size) t))
+            next-token (first (rseq (vec (take (+ 1 phrase-size) t))))
             p (phrase phrase-tokens :nopos)
             id (phrase-id p)]
         (recur (conj! phrases p)
-               (assoc! freqs id (conj (get id freqs []) next-token))
+               (assoc! freqs id (conj (get freqs id []) next-token))
                (rest t))))))
 
 (defn process-text
-  [text]
+  [text phrase-size]
   (let [doc text
         tokens (tokenize doc)]
-    (build-corpus 2 tokens)))
+    (build-corpus phrase-size tokens)))
 
-;; corpus as defined like this is a vector
-(def corpus  (:corpus (process-text text)))
-(def freq-table (:next-words (process-text text)))
-
-; todo change this from first to rand-nth when there's more training data
+; todo: limit the initial phrase by POS. Perhaps only nouns and adj? Can experiment.
 (defn- select-initial-phrase
   [corpus]
   (rand-nth corpus))
@@ -105,17 +106,24 @@
   (let [next-text (generate-text-of-next-phrase current-phrase next-word)]
     (find-phrase-in-corpus next-text corpus)))
 
+; todo: append period to end of sentence 
 (defn generate-sentence
+  "Given the desired sentence length, the corpus, and the frequency table, generate a sentence.
+  Returns a vector"
   [num-words-in-sentence corpus freq-table]
   (let [current-phrase (atom (select-initial-phrase corpus))]
     (loop [sentence (transient [])
            iteration (range 0 num-words-in-sentence)]
       (if (empty? iteration)
-        (persistent! sentence)
+        (detokenize (persistent! sentence))
         (let [next-word (get-next-word (deref current-phrase) freq-table)
               next-phrase (get-next-phrase (deref current-phrase) next-word corpus)]
           (reset! current-phrase next-phrase)
           (recur (conj! sentence next-word)
                  (rest iteration)))))))
 
-;(generate-sentence 5 corpus freq-table)
+;; corpus as defined like this is a vector
+(def phrase-size 3)
+(def corpus  (:corpus (process-text text phrase-size)))
+(def freq-table (:next-words (process-text text phrase-size)))
+(generate-sentence 10 corpus freq-table)
