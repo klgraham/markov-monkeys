@@ -1,8 +1,11 @@
 (ns markov-text.generator)
 
 (require '[clojure.string :as str])
+(require '[opennlp.nlp :as nlp])
+(use 'opennlp.treebank)
+(use 'clojure.pprint)
 
-(def text "see spot run. see spot jump. see spot swim.")
+(def text "John sees spot run. John sees spot jump. John sees spot swim.")
 
 ;;; Basic NLP
 ; todo: use OpenNLP to perform tokenization and to provide POS
@@ -26,10 +29,39 @@
   [words]
   (str/join " " words))
 
+;;; more advanced NLP, from OpenNLP
+
+(def get-sentences (nlp/make-sentence-detector "resources/models/en-sent.bin"))
+(def tokenizer (nlp/make-tokenizer "resources/models/en-token.bin"))
+(def detokenizer (nlp/make-detokenizer "resources/models/english-detokenizer.xml"))
+(def pos-tagger (nlp/make-pos-tagger "resources/models/en-pos-perceptron.bin"))
+;(def pos-tagger (nlp/make-pos-tagger "resources/models/en-pos-maxent.bin"))
+(def name-finder (nlp/make-name-finder "resources/models/en-ner-person.bin"))
+(def location-finder (nlp/make-name-finder "resources/models/en-ner-location.bin"))
+(def org-finder (nlp/make-name-finder "resources/models/en-ner-organization.bin"))
+(def chunker (make-treebank-chunker "resources/models/en-chunker.bin"))
+
+;;(pos-tagger (tokenizer text)) => (["see" "VB"] ["spot" "NN"] ["run" "NN"] ["." "."] ["see" "VB"] ["spot" "NN"] ["jump" "NN"] ["." "."] ["see" "VB"] ["spot" "NN"] ["swim" "NN"] ["." "."])
+;; need to turn each pair [text pos] into a hashmap
+
 (defn phrase
   "basic textual unit, with text and part-of-speech"
   [text pos]
   {:text text :pos pos})
+
+(defn token-and-pos->phrase
+  [pair]
+  (phrase (vector (first pair)) (vector (second pair))))
+
+(defn make-composite-phrase
+  [seq-of-text-pos-pairs]
+  (loop [phrase (transient {})
+        pairs seq-of-text-pos-pairs]
+   (if (empty? pairs)
+     (persistent! phrase)
+     (let [[text pos] (first pairs)]
+       (recur (assoc! phrase :text (vec (conj (get phrase :text) text)) :pos (vec (conj (get phrase :pos) pos)))
+              (rest pairs))))))
 
 ; todo: Add Prismatic/schema to check inputs
 (defn phrase-id
@@ -49,27 +81,31 @@
 
 ;(build-phrase ["Jack" "and" "Jill" "went" "up" "a" "hill."])
 
+; todo: frequency table has tons of repeats for large docs. need to make a real freq table and then sample from it.
 (defn build-corpus
-  [phrase-size tokens]
+  [phrase-size tokens-and-pos]
   (loop [phrases (transient #{})
          freqs (transient {})
-         t tokens]
+         t tokens-and-pos]
     (if (or (= (count t) 1) (empty? t))
       {:corpus (vec (persistent! phrases))
        :next-words (persistent! freqs)}
-      (let [phrase-tokens (vec (take phrase-size t))
-            next-token (first (rseq (vec (take (+ 1 phrase-size) t))))
-            p (phrase phrase-tokens :nopos)
+      (let [raw-phrase (take phrase-size t)
+            next-token-and-pos (first (rseq (vec (take (+ 1 phrase-size) t))))
+            p (make-composite-phrase raw-phrase)
             id (phrase-id p)]
+        ;(println raw-phrase)
+        ;(println next-token-and-pos)
+        ;(println p)
         (recur (conj! phrases p)
-               (assoc! freqs id (conj (get freqs id []) next-token))
+               (assoc! freqs id (conj (get freqs id []) (token-and-pos->phrase next-token-and-pos)))
                (rest t))))))
 
 (defn process-text
   [text phrase-size]
   (let [doc text
-        tokens (tokenize doc)]
-    (build-corpus phrase-size tokens)))
+        tokens-and-pos (pos-tagger (tokenizer doc))]
+    (build-corpus phrase-size tokens-and-pos)))
 
 ; todo: limit the initial phrase by POS. Perhaps only nouns and adj? Can experiment.
 (defn- select-initial-phrase
@@ -116,7 +152,7 @@
            iteration (range 0 num-words-in-sentence)]
       (if (empty? iteration)
         (detokenize (persistent! sentence))
-        (let [next-word (get-next-word (deref current-phrase) freq-table)
+        (let [next-word (first (:text (get-next-word (deref current-phrase) freq-table)))
               next-phrase (get-next-phrase (deref current-phrase) next-word corpus)]
           (reset! current-phrase next-phrase)
           (recur (conj! sentence next-word)
@@ -124,6 +160,7 @@
 
 ;; corpus as defined like this is a vector
 (def phrase-size 3)
-(def corpus  (:corpus (process-text text phrase-size)))
-(def freq-table (:next-words (process-text text phrase-size)))
+(def processed-text (process-text text phrase-size))
+(def corpus  (:corpus processed-text))
+(def freq-table (:next-words processed-text))
 (generate-sentence 10 corpus freq-table)
